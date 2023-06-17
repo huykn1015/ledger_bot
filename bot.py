@@ -67,6 +67,7 @@ async def register(ctx, poker_id):
         return None
     poker_ids[poker_id] = ctx.message.author.id
     print(balances)
+    save_dicts()
     await channel.send("Poker ID {} now linked to {}".format(poker_id, ctx.message.author.mention)) 
 
 @register.error
@@ -107,6 +108,7 @@ async def send_amount(ctx, dest:discord.User, amount):
         return None
     balances[send_id] -= amount
     balances[dest_id] += amount
+    save_dicts()
     await channel.send("{} sent {} to <@{}>".format(ctx.message.author.mention, amount, dest_id )) 
 
 @send_amount.error
@@ -131,6 +133,7 @@ async def log(ctx, link, sb):
             balances[account_id] += float(player['net']) * float(sb)
             confirm_text += "<@{}> : Added {:.2f} to balance\n".format(account_id, float(player['net']) * float(sb))
     channel = bot.get_channel(CHANNEL_ID)
+    save_dicts()
     await channel.send(confirm_text)
     
 @log.error
