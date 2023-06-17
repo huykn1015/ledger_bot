@@ -1,6 +1,8 @@
 import csv
 import heapq
+import json
 import math
+from os.path import exists
 import pandas as pd
 import urllib.request
 import discord
@@ -14,6 +16,16 @@ balances = {}
 #dict of pokernow id -> discord id
 poker_ids = {}
 
+def save_dicts():
+    id_json = json.dumps(poker_ids, indent=4)
+    balances_json = json.dumps(balances, indent=4)
+    with open("balances.json", "w") as outbalance:
+        json.dump(balances_json, outbalance)
+    with open("poker_ids.json", "w") as outid:
+        json.dump(id_json, outid)
+
+
+
 BOT_TOKEN = "MTExOTEyMzIxNzAyNjY1MDI1Mw.GROrKU.F6w64fyO0hVdkkaWB_9vkgpzoqhsMS-W44Ze3Q"
 CHANNEL_ID = 1119180260697702443
 intents = discord.Intents.default()
@@ -23,30 +35,24 @@ bot = commands.Bot(command_prefix="!", intents = intents)
 @bot.event
 async def on_ready():
     channel = bot.get_channel(CHANNEL_ID)
-"""
-#register poker now account to discord id with starting balance
+    print("Loading")
+    global balances
+    global poker_ids
+    if exists("balances.json"):
+        with open("balances.json") as balances_json_in:
+            balance_in = json.load(balances_json_in)
+            balances = json.loads(balance_in)
+            print(balances.keys())
+    if exists("poker_ids.json"):
+        with open("poker_ids.json") as ids_json_in:
+            ids_in = json.load(ids_json_in)
+            poker_ids = json.loads(ids_in)
+            print(poker_ids)
+
+
 @bot.command()
-async def register(ctx, poker_id):
-    acc_id = ctx.message.author.id
-    channel = bot.get_channel(CHANNEL_ID)
-
-    #account must not exist, poker id must not map to an account, balance must be valid
-    if acc_id in balances.keys():
-        await channel.send("Account Already Created") 
-        return None
-    if poker_id in poker_ids.keys():
-        await channel.send("Pokernow ID has already been linked to <@{}>".format(poker_ids[poker_id]))
-        return None
-    balances[acc_id] = 0 
-    poker_ids[poker_id] = acc_id
-    await channel.send("Created account for {}".format(ctx.message.author.mention))
-
-@register.error
-async def register_error(ctx, error):
-    if(isinstance(error, commands.MissingRequiredArgument)):
-        channel = bot.get_channel(CHANNEL_ID)
-        await channel.send("Please Enter Pokernow player ID ")
-"""
+async def save(ctx):
+    save_dicts()
 
 #register multiple ids to a discord account
 @bot.command()
@@ -55,11 +61,12 @@ async def register(ctx, poker_id):
     acc_id = ctx.message.author.id
     channel = bot.get_channel(CHANNEL_ID)
     if acc_id not in balances.keys():
-        balances[acc_id] = 0 
+        balances[str(acc_id)] = 0 
     if poker_id in poker_ids.keys():
         await channel.send("Pokernow ID has already been linked to <@{}>".format(poker_ids[poker_id]))
         return None
     poker_ids[poker_id] = ctx.message.author.id
+    print(balances)
     await channel.send("Poker ID {} now linked to {}".format(poker_id, ctx.message.author.mention)) 
 
 @register.error
@@ -71,13 +78,15 @@ async def register_id_error(ctx, error):
 #get balance of calling user 
 @bot.command(name="balance")
 async def get_balance(ctx):
-    account_id = ctx.message.author.id
+    acc_id = ctx.message.author.id
     channel = bot.get_channel(CHANNEL_ID)
-    if account_id not in balances.keys():
+    if str(acc_id) not in balances.keys():
+        print(str(acc_id))
+        print(balances)
         await channel.send("Cannot Find Account") 
         return None
-    acc_balance = balances[account_id]
-    await channel.send("{} balance: {}".format(ctx.message.author.mention, acc_balance))
+    acc_balance = balances[str(acc_id)]
+    await channel.send("{} balance: {:.2f}".format(ctx.message.author.mention, acc_balance))
 
 
 #transfer balance from caller to dest user
@@ -116,7 +125,6 @@ async def log(ctx, link, sb):
     confirm_text = ""
     print(ledger)
     for row, player in ledger.iterrows():
-        print(row, player['player_id'])
         if player['player_id'] in poker_ids.keys():
             account_id = poker_ids[player['player_id']]
             print(account_id)
@@ -158,29 +166,14 @@ async def payout(ctx):
             payouts[pos_id].append((neg_id, pos))
             heapq.heappush(netneg, ((neg + pos, neg_id)))
     payment_text = ""
-    print(payout)
     for dest_id, pay in payouts.items():
         for sender_id, amount in pay:
-            payment_text += "<@{}> Send {}; ".format(sender_id, amount)
+            payment_text += "<@{}> Send {:.2f}; ".format(sender_id, amount)
         payment_text += "to <@{}>\n".format(dest_id)
     channel = bot.get_channel(CHANNEL_ID)
     for acc_id in balances.keys():
         balances[acc_id] = 0
     await channel.send(payment_text)
-
-@bot.command()
-async def register_fake(ctx):
-    balances["test1"] = 0
-    balances["test2"] = 0
-    balances["test3"] = 0
-    balances["test4"] = 0
-    balances["test5"] = 0
-
-    poker_ids["lVfHZT7cB2"] = "test1"
-    poker_ids["nUueQ9JdsL"] = "test2"
-    poker_ids["XUs4Nlzbsp"] = "test3"
-    poker_ids["SUmXpIp4-U"] = "test4"
-    poker_ids["y5fuNHDVpG"] = "test5"
 
 
 #@bot.command(name="history")
