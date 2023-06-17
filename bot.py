@@ -1,21 +1,17 @@
-from discord.ext import commands, tasks
-import discord
-from discord.utils import get
 import csv
 import heapq
 import math
 import pandas as pd
 import urllib.request
+import discord
+from discord.utils import get
+from discord.ext import commands, tasks
 from dataclasses import dataclass, asdict, field
 
-@dataclass
-class account_info:
-    balance: float
-    buyin: float
     
-#dict of all accounts
-accounts = {}
-#dict of pokernow id to discord id
+#dict of account -> account info
+balances = {}
+#dict of pokernow id -> discord id
 poker_ids = {}
 
 BOT_TOKEN = "MTExOTEyMzIxNzAyNjY1MDI1Mw.GROrKU.F6w64fyO0hVdkkaWB_9vkgpzoqhsMS-W44Ze3Q"
@@ -27,65 +23,61 @@ bot = commands.Bot(command_prefix="!", intents = intents)
 @bot.event
 async def on_ready():
     channel = bot.get_channel(CHANNEL_ID)
-
+"""
 #register poker now account to discord id with starting balance
 @bot.command()
-async def register(ctx, poker_id, amount):
-    account_id = ctx.message.author.id
+async def register(ctx, poker_id):
+    acc_id = ctx.message.author.id
     channel = bot.get_channel(CHANNEL_ID)
 
     #account must not exist, poker id must not map to an account, balance must be valid
-    if account_id in accounts.keys():
+    if acc_id in balances.keys():
         await channel.send("Account Already Created") 
         return None
     if poker_id in poker_ids.keys():
-        await channel.send("Pokernow account has already been linked")
+        await channel.send("Pokernow ID has already been linked to <@{}>".format(poker_ids[poker_id]))
         return None
-    if float(amount) == 0.0:
-        print("Invalid amount")
-        await channel.send("Invalid Amount")
-
-    
-    amount = float(amount)
-    acc_info = account_info( amount, amount)
-
-    accounts[account_id] = acc_info
-    poker_ids[poker_id] = account_id
-    await channel.send("Created account for {} with balance of {}".format(ctx.message.author.mention, amount))
+    balances[acc_id] = 0 
+    poker_ids[poker_id] = acc_id
+    await channel.send("Created account for {}".format(ctx.message.author.mention))
 
 @register.error
-async def create_error(ctx, error):
+async def register_error(ctx, error):
     if(isinstance(error, commands.MissingRequiredArgument)):
         channel = bot.get_channel(CHANNEL_ID)
-        await channel.send("Please Enter Pokernow player ID and a valid Balance")
-
+        await channel.send("Please Enter Pokernow player ID ")
+"""
 
 #register multiple ids to a discord account
 @bot.command()
-async def register_id(ctx, poker_id):
+async def register(ctx, poker_id):
     #id must not already be registered
+    acc_id = ctx.message.author.id
+    channel = bot.get_channel(CHANNEL_ID)
+    if acc_id not in balances.keys():
+        balances[acc_id] = 0 
     if poker_id in poker_ids.keys():
-        await channel.send("Pokernow account has already been linked")
+        await channel.send("Pokernow ID has already been linked to <@{}>".format(poker_ids[poker_id]))
         return None
     poker_ids[poker_id] = ctx.message.author.id
-    channel = bot.get_channel(CHANNEL_ID)
-    await channel.send("Poker ID {} linked to {}".format(poker_id, ctx.message.author.mention)) 
+    await channel.send("Poker ID {} now linked to {}".format(poker_id, ctx.message.author.mention)) 
 
-#get balance of calling user or all balances
+@register.error
+async def register_id_error(ctx, error):
+    if(isinstance(error, commands.MissingRequiredArgument)):
+        channel = bot.get_channel(CHANNEL_ID)
+        await channel.send("Please Enter Pokernow player ID")
+
+#get balance of calling user 
 @bot.command(name="balance")
-async def get_balance(ctx, *args):
-    a = ",".join(args)
-    if len(args) > 0 and a[0] == "all":
-        for account, acc_info in accounts:
-            await channel.send("<@{}> balance: {}, Net: {}".format(account, acc_info.balance, acc_info.buying - acc_info.buyin))
-            return None
+async def get_balance(ctx):
     account_id = ctx.message.author.id
     channel = bot.get_channel(CHANNEL_ID)
-    if account_id not in accounts.keys():
+    if account_id not in balances.keys():
         await channel.send("Cannot Find Account") 
         return None
-    acc_info = accounts[account_id]
-    await channel.send("{} balance: {}, Net: {}".format(ctx.message.author.mention, acc_info.balance, acc_info.balance - acc_info.buyin))
+    acc_balance = balances[account_id]
+    await channel.send("{} balance: {}".format(ctx.message.author.mention, acc_balance))
 
 
 #transfer balance from caller to dest user
@@ -94,59 +86,26 @@ async def send_amount(ctx, dest:discord.User, amount):
     send_id = ctx.message.author.id
     dest_id = dest.id
     amount = float(amount)
+    if amount == 0.0:
+        await channel.send("Invalid Payment Amount")
+        return None
     channel = bot.get_channel(CHANNEL_ID)
-    if send_id not in accounts.keys():
+    if send_id not in balances.keys():
         await channel.send("Cannot Find Sender Account") 
         return None
-    if dest_id not in accounts.keys():
+    if dest_id not in balances.keys():
         await channel.send("Cannot Find Destination Account") 
         return None
-    send_info = accounts[send_id]
-    dest_info = accounts[dest_id]
-    if send_info.balance < amount:
-        await channel.sent("Not Sufficient Funds")
-        return None
-    send_info.balance -= amount
-    dest_info.balance += amount
+    balances[send_id] -= amount
+    balances[dest_id] += amount
     await channel.send("{} sent {} to <@{}>".format(ctx.message.author.mention, amount, dest_id )) 
 
 @send_amount.error
-async def create_error(ctx, error):
+async def send_error(ctx, error):
     if(isinstance(error, commands.MissingRequiredArgument)):
         channel = bot.get_channel(CHANNEL_ID)
         await channel.send("Please specify reviever and a valid Balance")
 
-#add to balance and buyin
-@bot.command(name="add")
-async def add(ctx, amount):
-    acc_id = ctx.message.author.id
-    amount = float(amount)
-    channel = bot.get_channel(CHANNEL_ID)
-    if acc_id not in accounts.keys():
-        await channel.send("Cannot Find Sender Account") 
-        return None
-    acc_info = accounts[acc_id]
-    acc_info.balance += amount
-    acc_info.buyin += amount
-    await channel.send("Added {} to {}\n New balance: {}, New Buy in: {}".format(amount, ctx.message.author.mention, acc_info.balance, acc_info.buyin))
-
-
-#remove from balance and buyin
-@bot.command(name="sub")
-async def sub(ctx, amount):
-    acc_id = ctx.message.author.id
-    amount = float(amount)
-    channel = bot.get_channel(CHANNEL_ID)
-    acc_info = accounts[acc_id]
-    if acc_id not in accounts.keys():
-        await channel.send("Cannot Find Sender Account") 
-        return None
-    if amount > acc_info.balance:
-        await channel.sent("Not Sufficient Funds")
-        return None
-    acc_info.balance -= amount
-    acc_info.buyin -= amount
-    await channel.send("Removed {:.2f} from {}".format(amount, ctx.message.author.mention))
 
 #takes game and addes values to all balances 
 @bot.command(name="log")
@@ -158,20 +117,17 @@ async def log(ctx, link, sb):
     for row, player in ledger.iterrows():
         if player['player_id'] in poker_ids.keys():
             account_id = poker_ids[player['player_id']]
-            acc_info = accounts[account_id]
+            balances[account_id] += float(player['net']) * float(sb)
             user = await ctx.bot.fetch_user(account_id)
-            buy_in =  float(player['buy_in']) * float(sb)
-            stack_in = float(player['stack']) * float(sb)
-            if not math.isnan(float(player['buy_out'])):
-                stack_in +=  float(player['buy_out']) * float(sb) 
-            acc_info.buyin += buy_in
-            acc_info.balance += stack_in 
-            confirm_text += "<@{}> : Added {:.2f} to buy in, added {:.2f} to balance\n".format(user.id, buy_in, stack_in)
+            confirm_text += "<@{}> : Added {:.2f} to balance\n".format(user.id, float(player['net']) * float(sb))
     channel = bot.get_channel(CHANNEL_ID)
     await channel.send(confirm_text)
     
-    #get csv
-
+@log.error
+async def create_error(ctx, error):
+    if(isinstance(error, commands.MissingRequiredArgument)):
+        channel = bot.get_channel(CHANNEL_ID)
+        await channel.send("Please provide a pokernow link and a the small blind amount")
 
 @bot.command(name="payout")
 async def payout(ctx):
@@ -180,39 +136,37 @@ async def payout(ctx):
     #key = id of acc receiving money, value = list of payments
     #payments = (payer id, amount)
     payouts = {} 
-    for acc_id, acc_info in accounts:
-        net = acc_info.balance - acc_info.buyin
+    for acc_id, net in balances.items():
         if net > 0:
             netpos.append((-net, acc_id))
+            payouts[acc_id] = []
         elif net < 0:
             netneg.append((net, acc_id))
-    for net, id in netpos:
-        payout[id] = []
     heapq.heapify(netpos)
     heapq.heapify(netneg)
     while netneg and netpos:
-        pos, pos_id = - heapq.heappop(netpos)
+        pos, pos_id = heapq.heappop(netpos)
         neg, neg_id = heapq.heappop(netneg)
+        pos = - pos
         if pos >= - neg:
             payouts[pos_id].append((neg_id, -neg))
             if(pos != -neg):
                 heapq.heappush(netpos,(-pos - neg, pos_id))
         else:
-            payout[pos_id].append((neg_id, pos))
+            payouts[pos_id].append((neg_id, pos))
             heapq.heappush(netneg((neg + pos, neg_id)))
     payment_text = ""
-    for dest_id, pay in payout:
+    for dest_id, pay in payouts.items():
         for sender_id, amount in pay:
             payment_text += "<@{}> Send {}; ".format(sender_id, amount)
         payment_text += "to <@{}>\n".format(dest_id)
     channel = bot.get_channel(CHANNEL_ID)
+    for acc_id in balances.keys():
+        balances[acc_id] = 0
     await channel.send(payment_text)
 
 
 #@bot.command(name="history")
-
-
-
 
 
 bot.run(BOT_TOKEN)
