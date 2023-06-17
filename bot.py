@@ -114,12 +114,14 @@ async def log(ctx, link, sb):
     url = "https://www.pokernow.club/games/{}/ledger_{}.csv".format(game_id, game_id)
     ledger = pd.read_csv(url)
     confirm_text = ""
+    print(ledger)
     for row, player in ledger.iterrows():
+        print(row, player['player_id'])
         if player['player_id'] in poker_ids.keys():
             account_id = poker_ids[player['player_id']]
+            print(account_id)
             balances[account_id] += float(player['net']) * float(sb)
-            user = await ctx.bot.fetch_user(account_id)
-            confirm_text += "<@{}> : Added {:.2f} to balance\n".format(user.id, float(player['net']) * float(sb))
+            confirm_text += "<@{}> : Added {:.2f} to balance\n".format(account_id, float(player['net']) * float(sb))
     channel = bot.get_channel(CHANNEL_ID)
     await channel.send(confirm_text)
     
@@ -154,8 +156,9 @@ async def payout(ctx):
                 heapq.heappush(netpos,(-pos - neg, pos_id))
         else:
             payouts[pos_id].append((neg_id, pos))
-            heapq.heappush(netneg((neg + pos, neg_id)))
+            heapq.heappush(netneg, ((neg + pos, neg_id)))
     payment_text = ""
+    print(payout)
     for dest_id, pay in payouts.items():
         for sender_id, amount in pay:
             payment_text += "<@{}> Send {}; ".format(sender_id, amount)
@@ -164,6 +167,20 @@ async def payout(ctx):
     for acc_id in balances.keys():
         balances[acc_id] = 0
     await channel.send(payment_text)
+
+@bot.command()
+async def register_fake(ctx):
+    balances["test1"] = 0
+    balances["test2"] = 0
+    balances["test3"] = 0
+    balances["test4"] = 0
+    balances["test5"] = 0
+
+    poker_ids["lVfHZT7cB2"] = "test1"
+    poker_ids["nUueQ9JdsL"] = "test2"
+    poker_ids["XUs4Nlzbsp"] = "test3"
+    poker_ids["SUmXpIp4-U"] = "test4"
+    poker_ids["y5fuNHDVpG"] = "test5"
 
 
 #@bot.command(name="history")
