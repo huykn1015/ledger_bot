@@ -82,8 +82,6 @@ async def get_balance(ctx):
     acc_id = ctx.message.author.id
     channel = bot.get_channel(CHANNEL_ID)
     if str(acc_id) not in balances.keys():
-        print(str(acc_id))
-        print(balances)
         await channel.send("Cannot Find Account") 
         return None
     acc_balance = balances[str(acc_id)]
@@ -127,11 +125,14 @@ async def log(ctx, link, sb):
     confirm_text = ""
     print(ledger)
     for row, player in ledger.iterrows():
+        print(player['player_id'])
         if player['player_id'] in poker_ids.keys():
-            account_id = poker_ids[player['player_id']]
-            print(account_id)
-            balances[account_id] += float(player['net']) * float(sb)
-            confirm_text += "<@{}> : Added {:.2f} to balance\n".format(account_id, float(player['net']) * float(sb))
+            print("match")
+            acc_id = poker_ids[player['player_id']]
+            balances[str(acc_id)] += float(player['net']) * float(sb)
+            print("acc_id")
+            confirm_text += "<@{}> : Added {:.2f} to balance\n".format(acc_id, float(player['net']) * float(sb))
+            print ("<@{}> : Added {:.2f} to balance\n".format(acc_id, float(player['net']) * float(sb)))
     channel = bot.get_channel(CHANNEL_ID)
     save_dicts()
     await channel.send(confirm_text)
